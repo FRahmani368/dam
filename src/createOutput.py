@@ -6,6 +6,7 @@ import geopandas as gpd
 import glob
 import rasterio
 import rasterio.mask
+import rasterio.shutil
 from rasterio.merge import merge
 import fiona
 import pysheds
@@ -20,25 +21,12 @@ def outputDir(path_dict):
     # creating output directory:
     if not os.path.isdir(path_dict['output_dir']):
         os.mkdir(path_dict['output_dir'])
-        os.mkdir(os.path.join(path_dict['output_dir'], 'flowAccu'))
-        path_dict['flowAccu_path'] = os.path.join(path_dict['output_dir'], 'flowAccu')
         os.mkdir(os.path.join(path_dict['output_dir'], 'tempFolder'))
         path_dict['tempFolder_path'] = os.path.join(path_dict['output_dir'], 'tempFolder')
-        os.mkdir(os.path.join(path_dict['output_dir'], 'rasterBounds'))
-        path_dict['rasterBounds_path'] = os.path.join(path_dict['output_dir'], 'rasterBounds')
     else:
-        if not os.path.isdir(os.path.join(path_dict['output_dir'], 'flowAccu')):
-            os.mkdir(os.path.join(path_dict['output_dir'], 'flowAccu'))
-        path_dict['flowAccu_path'] = os.path.join(path_dict['output_dir'], 'flowAccu')
-
         if not os.path.isdir(os.path.join(path_dict['output_dir'], 'tempFolder')):
             os.mkdir(os.path.join(path_dict['output_dir'], 'tempFolder'))
         path_dict['tempFolder_path'] = os.path.join(path_dict['output_dir'], 'tempFolder')
-
-        if not os.path.isdir(os.path.join(path_dict['output_dir'], 'rasterBounds')):
-            os.mkdir(os.path.join(path_dict['output_dir'], 'rasterBounds'))
-        path_dict['rasterBounds_path'] = os.path.join(path_dict['output_dir'], 'rasterBounds')
-
     return path_dict
 
 def find_rasterBounds(path_dict):
@@ -62,17 +50,39 @@ def find_rasterBounds(path_dict):
 
     return rs_bounds
 
-def general_purpose_watershed(dam):
+def general_purpose_watershed(dam, dams_shp_prj):
     purpose_list = pd.DataFrame([["I", "H", "C", "N", "S", "R", "P", "F", "D", "T", "O", "G"],
                                  np.zeros(12), np.zeros(12)]).transpose()
     purpose_list.columns = ['purpose', 'priority', 'normal_stor']
 
     if len(dam) == 1:
-        general_purpose = dam['PURPOSES'].values[0][0]
+        if dam['PURPOSES'].values[0] is None:
+            general_purpose = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Purposes'].values[0]
+            if len(general_purpose) > 1:    # if there were more than one purpose for a dam
+                general_purpose = general_purpose[0]
+        else:
+            general_purpose = dam['PURPOSES'].values[0][0]
     else:
         pur = dam['PURPOSES'].tolist()
+        for ii, i in enumerate(pur):
+            if i is None:
+                pur[ii] = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].tolist()[ii], 'Purposes'].values[0]
+                if pur[ii] is None:
+                  continue
+                elif len(pur[ii]) > 1:
+                    pur[ii] = pur[ii][0]
         norm_stor = dam['NORMAL_STORAGE'].tolist()
-        for i in range(len(dam)):
+        for ii, i in enumerate(norm_stor):
+            if i is None:
+                norm_stor[ii] = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].tolist()[ii], 'Normal_Sto'].values[0]
+                if len(norm_stor[ii]) > 1:
+                    norm_stor[ii] = norm_stor[ii][0]
+        ### now removing None in pur and norm_stor
+        for ii, i in enumerate(pur):
+            if i is None:
+                del pur[ii]
+                del norm_stor[ii]
+        for i in range(len(pur)):
             purpose_list.loc[purpose_list['purpose'] == pur[i], 'normal_stor'] += norm_stor[i]
             purpose_list.loc[purpose_list['purpose'] == pur[i], 'priority'] += 1
 
@@ -151,7 +161,9 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         AccuProcess = True
     elif len(rs_lst) == 1:
         # copy the tif file to tempfolder to work on
-        shutil.copyfile(rs_lst[0], temp_mosaic_path)
+        # shutil.copyfile(rs_lst[0], temp_mosaic_path)
+        rasterio.shutil.copy(rs_lst[0], temp_mosaic_path)
+        # make a new file
         AccuProcess = True
     else:
         print("There was no Topography .TIFF file for watershed:   " + os.path.split(shapefile)[1], '\n')

@@ -34,6 +34,7 @@ path_dict['path_dams_shp'] = r"/data/fzr5082/NID/maj_dams_shp/us-dams.shp"  # da
 path_dict['path_dams_info'] = r"/data/fzr5082/NID/NID2019_U.feather"  # dams excel file information
 path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_point_shapefile/gagesII_9322_sept30_2011.shp"  # streamflow gauges point shapefile
 path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
+# path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
 
 # creating directories
 path_dict = outputDir(path_dict)
@@ -60,11 +61,16 @@ gages_prj = gages.to_crs('epsg:4269')  # Do projection for the shapefile
 def reservoirs(wtshd):
     data = []  # to store all variables we need and append it to pandas dataframe file at the end
     watershed = gpd.read_file(wtshd)
-    watershed_prj = watershed.to_crs('epsg:4269')
+    geom_buffer = watershed.buffer(400)
+    watershed1 = gpd.read_file(wtshd)
+    watershed1['geometry'] = geom_buffer
+    watershed_prj = watershed1.to_crs('epsg:4269')
+    watershed_prj_path = os.path.join(path_dict['tempFolder_path'], 'watershed_prj.shp')
+    watershed_prj.to_file(watershed_prj_path)
     data.append(watershed_prj['GAGE_ID'][0])
     data.append(watershed_prj['AREA'][0])
 
-    flowAccu_temp_path, AccuProcess = create_FlowAccu_tif_file(wtshd, path_dict)
+    flowAccu_temp_path, AccuProcess = create_FlowAccu_tif_file(watershed_prj_path, path_dict)
     ### if AccuProcess = True --> it means there is at least a tif file that has overlap with the watershed
     ### if AccuProcess = False --> it means there is not any tif file that has overlap with the watershed
     if AccuProcess == True:
@@ -75,7 +81,8 @@ def reservoirs(wtshd):
     data.extend(watershed_outlet)
 
     ## finding all dams inside a watershed
-    selected_dams = gpd.clip(dams_shp_prj, watershed_prj)
+    watershed2 = watershed.to_crs('epsg:4269')
+    selected_dams = gpd.clip(dams_shp_prj, watershed2)
     No_dams = len(selected_dams)  # number of dams inside a watershed
     data.append(No_dams)
 
@@ -105,7 +112,7 @@ def reservoirs(wtshd):
         # To calculate General Purpose of each watershed based on the dams inside it
         dam = dams_info.loc[dams_info["NIDID"].isin(dam_ID)]
         if len(dam) > 0:  # sometimes some dams in shape file are not in the excel file
-            general_purpose = general_purpose_watershed(dam)
+            general_purpose = general_purpose_watershed(dam, dams_shp_prj)
         else:
             general_purpose = '_'
 
@@ -121,11 +128,18 @@ def reservoirs(wtshd):
 
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
 result = []
-for wtshd in shp_lst[18:]:
+count = 1
+for wtshd in shp_lst:
     data = reservoirs(wtshd)
     result.append(data)
-
-
+    print(count)
+    count = count + 1
+    columns = [
+        'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
+        'general_purpose'
+    ]
+    Reservoirs = pd.DataFrame(result, columns=columns)
+    Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
 ###########################################################
 #### multiprocessing part is not working yet ##############
 
@@ -142,10 +156,5 @@ for wtshd in shp_lst[18:]:
 # appending data that is collected for this watershed to Reservoirs dataframe
 ###### difining a pandas file to store averything inside it.
 ###### This is my results
-columns = [
-    'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
-    'general_purpose'
-]
-Reservoirs = pd.DataFrame(result, columns=columns)
-Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
+
 print('END')
