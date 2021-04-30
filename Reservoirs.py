@@ -1,10 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-import rasterio
-import rasterio.mask
-from rasterio.merge import merge
-import fiona
+import pyarrow
 import glob
 import geopandas as gpd
 import multiprocessing

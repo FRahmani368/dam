@@ -138,6 +138,8 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
                     rs_lst.append(tif_file)
 
     temp_mosaic_path = os.path.join(path_dict['tempFolder_path'], 'temp_mosaic.tif')
+    ### to  release the memory
+    tile = None
     if len(rs_lst) > 1:   # need to mosaic
         src_files_to_mosaic = []
         for fp in rs_lst:
@@ -158,6 +160,9 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         with rasterio.open(temp_mosaic_path, "w", **out_meta) as dest:
             dest.write(out_image_mos)
         dest.close()
+        ### to release memory
+        dest = None
+        out_image_mos = None
         AccuProcess = True
     elif len(rs_lst) == 1:
         # copy the tif file to tempfolder to work on
@@ -186,16 +191,23 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         with rasterio.open(topo_clip_temp_path, "w", **out_meta) as dest:
             dest.write(out_image)
         dest.close()
-
+        ### to release the memory
+        dest = None
+        out_image = None
     #  calculating flow direction and flow accumulation (using pysheds package)
     grid = Grid.from_raster(topo_clip_temp_path, data_name='dem')
     grid.fill_depressions(data='dem', out_name='flooded_dem')
+    grid.dem = None
     grid.resolve_flats(data='flooded_dem', out_name='inflated_dem')
-
+    grid.flooded_dem = None
     # dirmap = (1, 2, 3, 4, 5, 6, 7, 8)
     dirmap = (64, 128, 1, 2, 4, 8, 16, 32)  # ESRI default
     grid.flowdir(data='inflated_dem', out_name='dir', dirmap=dirmap)
+    grid.inflated_dem = None
     grid.accumulation(data='dir', out_name='acc')
+    grid.dir = None
     flowAccu_temp_path = os.path.join(path_dict['tempFolder_path'], 'flowAccu_temp.tif')
-    grid.to_raster('dir', flowAccu_temp_path)
+    # grid.to_raster('dir', flowAccu_temp_path)
+    grid.to_raster('acc', flowAccu_temp_path, dtype=np.int32)
+    # grid = None
     return flowAccu_temp_path, AccuProcess
