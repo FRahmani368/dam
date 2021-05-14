@@ -51,17 +51,33 @@ def find_rasterBounds(path_dict):
     return rs_bounds
 
 def general_purpose_watershed(dam, dams_shp_prj):
-    purpose_list = pd.DataFrame([["I", "H", "C", "N", "S", "R", "P", "F", "D", "T", "O", "G"],
-                                 np.zeros(12), np.zeros(12)]).transpose()
-    purpose_list.columns = ['purpose', 'priority', 'normal_stor']
+    # purpose_list = pd.DataFrame([["I", "H", "C", "N", "S", "R", "P", "F", "D", "T", "O", "G"],
+    #                              np.zeros(12), np.zeros(12)]).transpose()
+    purpose_list = pd.DataFrame([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                                 ["_", "I", "H", "C", "N", "S", "R", "P", "F", "D", "T", "O", "G"],
+                                 np.zeros(13), np.zeros(13)]).transpose()
+    purpose_list.columns = ['purpose_code', 'purpose', 'priority', 'normal_stor']
 
     if len(dam) == 1:
         if dam['PURPOSES'].values[0] is None:
-            general_purpose = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Purposes'].values[0]
-            if len(general_purpose) > 1:    # if there were more than one purpose for a dam
-                general_purpose = general_purpose[0]
+            pur = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Purposes'].values[0])
+            # general_purpose = purpose_list.loc[purpose_list['purpose']==(dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Purposes'].values[0]),
+            #                                    'purpose_code'].values[0]
+            if pur is None:
+                general_purpose = purpose_list.loc[purpose_list['purpose']=="_", 'purpose_code'].values[0]
+            else:     # if there were more than one purpose for a dam
+                general_purpose = purpose_list.loc[purpose_list['purpose'] == pur[0], 'purpose_code'].values[0]
         else:
-            general_purpose = dam['PURPOSES'].values[0][0]
+            general_purpose = purpose_list.loc[purpose_list['purpose']==dam['PURPOSES'].values[0][0], 'purpose_code'].values[0]
+
+        ## finding the max(normal_storage)
+        max_norm_stor = dam['NORMAL_STORAGE'].values[0]
+        if max_norm_stor is None:
+            max_norm_stor = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Normal_Sto'].values[0])
+            if max_norm_stor is None:
+                max_norm_stor = 0
+        # finding the standard deviation of normal storage of dams. here, as there is one dam --> std = 0
+        std_norm_stor = 0
     else:
         pur = dam['PURPOSES'].tolist()
         for ii, i in enumerate(pur):
@@ -72,6 +88,7 @@ def general_purpose_watershed(dam, dams_shp_prj):
                 elif len(pur[ii]) > 1:
                     pur[ii] = pur[ii][0]
         norm_stor = dam['NORMAL_STORAGE'].tolist()
+
         for ii, i in enumerate(norm_stor):
             if i is None:
                 norm_stor[ii] = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].tolist()[ii], 'Normal_Sto'].values[0]
@@ -83,16 +100,23 @@ def general_purpose_watershed(dam, dams_shp_prj):
                 del pur[ii]
                 del norm_stor[ii]
         for i in range(len(pur)):
-            purpose_list.loc[purpose_list['purpose'] == pur[i], 'normal_stor'] += norm_stor[i]
-            purpose_list.loc[purpose_list['purpose'] == pur[i], 'priority'] += 1
+            for j in range(len(pur[i])):
+                purpose_list.loc[purpose_list['purpose'] == pur[i][j], 'normal_stor'] += norm_stor[i]
+                purpose_list.loc[purpose_list['purpose'] == pur[i][j], 'priority'] += j
 
         # sort by normal storage
-        purpose_list = purpose_list.sort_values(by='normal_stor')
+        purpose_list = purpose_list.sort_values(by='normal_stor', ascending=False).reset_index(drop=True)
         datatemp = purpose_list.loc[purpose_list['normal_stor'] == purpose_list['normal_stor'][0]]
         # sort by priority
-        datatemp = datatemp.sort_values(by='priority')
-        general_purpose = (datatemp.iloc[0]['purpose'])
-    return general_purpose
+        datatemp = datatemp.sort_values(by='priority').reset_index(drop=True)
+        general_purpose = (datatemp.iloc[0]['purpose_code'])
+
+        ## finding the max(normal_storage)
+        max_norm_stor = np.nanmax(norm_stor)
+        # finding the standard deviation of normal storage of dams
+        std_norm_stor = np.nanstd(norm_stor)
+
+    return general_purpose, max_norm_stor, std_norm_stor
 
 def find_watershed_outlet(watershed_prj, flowAccu_prj_path, gages_prj):
     gages_prj_clip = gpd.clip(gages_prj, watershed_prj)
@@ -195,19 +219,64 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         dest = None
         out_image = None
     #  calculating flow direction and flow accumulation (using pysheds package)
-    grid = Grid.from_raster(topo_clip_temp_path, data_name='dem')
-    grid.fill_depressions(data='dem', out_name='flooded_dem')
-    grid.dem = None
-    grid.resolve_flats(data='flooded_dem', out_name='inflated_dem')
-    grid.flooded_dem = None
-    # dirmap = (1, 2, 3, 4, 5, 6, 7, 8)
-    dirmap = (64, 128, 1, 2, 4, 8, 16, 32)  # ESRI default
-    grid.flowdir(data='inflated_dem', out_name='dir', dirmap=dirmap)
-    grid.inflated_dem = None
-    grid.accumulation(data='dir', out_name='acc')
-    grid.dir = None
-    flowAccu_temp_path = os.path.join(path_dict['tempFolder_path'], 'flowAccu_temp.tif')
-    # grid.to_raster('dir', flowAccu_temp_path)
-    grid.to_raster('acc', flowAccu_temp_path, dtype=np.int32)
-    # grid = None
-    return flowAccu_temp_path, AccuProcess
+    try:
+        grid = Grid.from_raster(topo_clip_temp_path, data_name='dem')
+        grid.fill_depressions(data='dem', out_name='flooded_dem')
+        grid.dem = None
+        grid.resolve_flats(data='flooded_dem', out_name='inflated_dem')
+        grid.flooded_dem = None
+        # dirmap = (1, 2, 3, 4, 5, 6, 7, 8)
+        dirmap = (64, 128, 1, 2, 4, 8, 16, 32)  # ESRI default
+        grid.flowdir(data='inflated_dem', out_name='dir', dirmap=dirmap)
+        grid.inflated_dem = None
+        grid.accumulation(data='dir', out_name='acc')
+        grid.dir = None
+        flowAccu_temp_path = os.path.join(path_dict['tempFolder_path'], 'flowAccu_temp.tif')
+        # grid.to_raster('dir', flowAccu_temp_path)
+        grid.to_raster('acc', flowAccu_temp_path, dtype=np.int32)
+        grid = None
+        return flowAccu_temp_path, AccuProcess
+    except:
+        AccuProcess = False
+        return flowAccu_temp_path, AccuProcess
+
+
+
+
+def create_FlowAccu_hgt_file(shapefile, path_dict):
+    topo_hgt_lst = glob.glob(path_dict['topography_path'] + '*.hgt')
+    shape = gpd.read_file(shapefile)
+    shape = shape.to_crs('epsg:4269')
+    shape_path_temp = os.path.join(path_dict['tempFolder_path'], 'watershed.shp')
+    shape.to_file(shape_path_temp)
+
+
+    raster = gdal.Open('sample.tif')
+    vector = ogr.Open('sample.shp')
+
+    # Get raster geometry
+    transform = raster.GetGeoTransform()
+    pixelWidth = transform[1]
+    pixelHeight = transform[5]
+    cols = raster.RasterXSize
+    rows = raster.RasterYSize
+
+    xLeft = transform[0]
+    yTop = transform[3]
+    xRight = xLeft + cols * pixelWidth
+    yBottom = yTop - rows * pixelHeight
+
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(xLeft, yTop)
+    ring.AddPoint(xLeft, yBottom)
+    ring.AddPoint(xRight, yTop)
+    ring.AddPoint(xRight, yBottom)
+    ring.AddPoint(xLeft, yTop)
+    rasterGeometry = ogr.Geometry(ogr.wkbPolygon)
+    rasterGeometry.AddGeometry(ring)
+
+    # Get vector geometry
+    layer = vector.GetLayer()
+    feature = layer.GetFeature(0)
+    vectorGeometry = feature.GetGeometryRef()
+    rasterGeometry.Intersect(vectorGeometry)
