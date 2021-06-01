@@ -241,42 +241,11 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         return flowAccu_temp_path, AccuProcess
 
 
+def finding_NDAMS(watershed_prj, dams_info_gdf_prj, path_dict):
+    dams_clip = gpd.clip(dams_info_gdf_prj, watershed_prj)
+    NDAMS = len(dams_clip)
+    STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist()))/(watershed_prj['AREA'][0] * 1e-6) # 1.233 Acre-feet to Megaliter
+    return NDAMS, STOR_NOR_2009
 
 
-def create_FlowAccu_hgt_file(shapefile, path_dict):
-    topo_hgt_lst = glob.glob(path_dict['topography_path'] + '*.hgt')
-    shape = gpd.read_file(shapefile)
-    shape = shape.to_crs('epsg:4269')
-    shape_path_temp = os.path.join(path_dict['tempFolder_path'], 'watershed.shp')
-    shape.to_file(shape_path_temp)
 
-
-    raster = gdal.Open('sample.tif')
-    vector = ogr.Open('sample.shp')
-
-    # Get raster geometry
-    transform = raster.GetGeoTransform()
-    pixelWidth = transform[1]
-    pixelHeight = transform[5]
-    cols = raster.RasterXSize
-    rows = raster.RasterYSize
-
-    xLeft = transform[0]
-    yTop = transform[3]
-    xRight = xLeft + cols * pixelWidth
-    yBottom = yTop - rows * pixelHeight
-
-    ring = ogr.Geometry(ogr.wkbLinearRing)
-    ring.AddPoint(xLeft, yTop)
-    ring.AddPoint(xLeft, yBottom)
-    ring.AddPoint(xRight, yTop)
-    ring.AddPoint(xRight, yBottom)
-    ring.AddPoint(xLeft, yTop)
-    rasterGeometry = ogr.Geometry(ogr.wkbPolygon)
-    rasterGeometry.AddGeometry(ring)
-
-    # Get vector geometry
-    layer = vector.GetLayer()
-    feature = layer.GetFeature(0)
-    vectorGeometry = feature.GetGeometryRef()
-    rasterGeometry.Intersect(vectorGeometry)
