@@ -50,12 +50,17 @@ dams_shp = gpd.read_file(path_dict['path_dams_shp'])
 dams_shp_prj = dams_shp.to_crs('epsg:4269')  # Do projection for the shapefile
 ## some information of the dams in dams_shp is in the following file (dams_info)
 dams_info = pd.read_feather(path_dict['path_dams_info'])
-
+dams_info_m = dams_info.loc[dams_info['OTHERSTRUCTUREID']!=dams_info['OTHERSTRUCTUREID']].reset_index(drop=True)
 dams_info_gdf = gpd.GeoDataFrame(
-    dams_info, geometry=gpd.points_from_xy(dams_info.LONGITUDE, dams_info.LATITUDE))
+    dams_info_m, geometry=gpd.points_from_xy(dams_info_m.LONGITUDE, dams_info_m.LATITUDE))
 
 dams_info_gdf.set_crs(epsg=4269, inplace=True)
 print("dams information file was read")
+### remove maj dams that are not in dams_info_gdf
+tempsites = dams_shp_prj['NID_ID_Cod'].tolist()
+x = dams_info_gdf.loc[dams_info_gdf['NIDID'].isin(tempsites),'NIDID'].tolist()
+dams_shp_prj = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'].isin(x)]
+
 
 # Reading flow gages shapefile which is used for finding the outlet of a watershed
 gages = gpd.read_file(path_dict['gages_path'])
@@ -150,7 +155,7 @@ def reservoirs(wtshd):
 result = []
 count = 1
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
-for wtshd in shp_lst:
+for wtshd in shp_lst[1878:]:
     data = reservoirs(wtshd)
     result.append(data)
     print(count)
