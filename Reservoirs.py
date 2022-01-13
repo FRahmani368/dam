@@ -32,10 +32,10 @@ path_dict['path_shp'] = r"/data/wxt42/hydroDL_reservoir_data/total_shp/CONUS_bas
 path_dict['path_dams_shp'] = r"/data/fzr5082/NID/maj_dams_shp/us-dams.shp"  # dams point shapefile
 path_dict['path_dams_info'] = r"/data/fzr5082/NID/NID2019_U.feather"  # dams excel file information
 path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_point_shapefile/gagesII_9322_sept30_2011.shp"  # streamflow gauges point shapefile
-# path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
-path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
+path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
+# path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
 # Do we need Flow accumulation (DEM part) part? If yes --> needDEM = True, if No --> needDEM = False
-needDEM = False
+needDEM = True
 # creating directories
 path_dict = outputDir(path_dict)
 
@@ -71,7 +71,7 @@ gages_prj = gages.to_crs('epsg:4269')  # Do projection for the shapefile
 def reservoirs(wtshd):
     data = []  # to store all variables we need and append it to pandas dataframe file at the end
     watershed = gpd.read_file(wtshd)
-    geom_buffer = watershed.buffer(400)
+    geom_buffer = watershed.buffer(400)    # it was 400 before, Farshid changed it to 0
     watershed1 = gpd.read_file(wtshd)
     watershed1['geometry'] = geom_buffer
     watershed_prj = watershed1.to_crs('epsg:4269')
@@ -119,7 +119,7 @@ def reservoirs(wtshd):
                 distance = hs.haversine(dam_point, outlet_point, unit=hs.Unit.METERS)
                 distance_outlet_dams.append(distance)
             else:
-                distance_outlet_dams.append(np.nan)
+                distance_outlet_dams.append(-999)   # it was np.nan before
 
         data.append(np.nanmin(distance_outlet_dams))  # distance of nearest dam from the outlet
         data.append(np.nanmean(distance_outlet_dams))  # average distance of dams from outlet
@@ -134,7 +134,7 @@ def reservoirs(wtshd):
             std_norm_stor = 0
 
     else:  # No dam in watershed
-        data.extend([np.nan, np.nan])  # this is for dams distance and watershed outlet (means no dam in watershed)
+        data.extend([-999, -999])  # this is for dams distance and watershed outlet (means no dam in watershed)
         general_purpose = 0
         max_norm_stor = 0
         std_norm_stor = 0
@@ -155,7 +155,7 @@ def reservoirs(wtshd):
 result = []
 count = 1
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
-for wtshd in shp_lst[1878:]:
+for wtshd in shp_lst:   # [1878:]
     data = reservoirs(wtshd)
     result.append(data)
     print(count)

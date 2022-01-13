@@ -9,6 +9,7 @@ import rasterio.mask
 import rasterio.shutil
 from rasterio.merge import merge
 import fiona
+import haversine as hs # this is for distance calculation between two points
 import pysheds
 from pysheds.grid import Grid   # use conda install -c conda-forge pysheds
 import shutil
@@ -123,16 +124,23 @@ def find_watershed_outlet(watershed_prj, flowAccu_prj_path, gages_prj):
     if len(gages_prj_clip) > 0:    # it means at least one gage is inside the waterhed
         flowAccu_prj = rasterio.open(flowAccu_prj_path)
         gage_accu_val = []
+        p1, p2 = np.where(flowAccu_prj.read(1) == flowAccu_prj.read(1).max())
+        lat_lon_best = flowAccu_prj.transform * (p1, p2)
         for i, point in enumerate(gages_prj_clip['geometry']):
             x = point.xy[0][0]
             y = point.xy[1][0]
+            distance = hs.haversine(lat_lon_best, (x, y), unit=hs.Unit.METERS)
             row, col = flowAccu_prj.index(x, y)
             flow_accu_val = flowAccu_prj.read(1)[row, col]
+            ### based flow accumulation value of the gages that we have observed data
+            # gage_accu_val.append([gages_prj_clip['STAID'].values[i], flow_accu_val, x, y])
 
-            gage_accu_val.append([gages_prj_clip['STAID'].values[i], flow_accu_val, x, y])
-
-        gage_accu_val_pd = pd.DataFrame(gage_accu_val, columns=["STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE"])
-        gage_accu_val_pd = gage_accu_val_pd.sort_values(by="flow_Accu", ascending=False)
+        # gage_accu_val_pd = pd.DataFrame(gage_accu_val, columns=["STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE"])
+        # gage_accu_val_pd = gage_accu_val_pd.sort_values(by="flow_Accu", ascending=False)
+        # watershed_outlet = gage_accu_val_pd.iloc[0].tolist()
+            gage_accu_val.append([gages_prj_clip['STAID'].values[i], distance, x, y])
+        gage_accu_val_pd = pd.DataFrame(gage_accu_val, columns=["STAID", "distance", "LAT_GAGE", "LNG_GAGE"])
+        gage_accu_val_pd = gage_accu_val_pd.sort_values(by="distance", ascending=True)
         watershed_outlet = gage_accu_val_pd.iloc[0].tolist()
         return watershed_outlet
     else:

@@ -199,8 +199,8 @@ for dirs in dirs_shp:
                 general_purpose = '_'
                 
         else: # No dam in watershed
-            data.extend([np.nan, np.nan])   # this is for dams distance and watershed outlet (means no dam in watershed)
-            general_purpose = '_'
+            data.extend([-999, -999])   # this is for dams distance and watershed outlet (means no dam in watershed)
+            general_purpose = -1       # no dam in the watershed, it was "_" before. Farshid changed it to -1
         
         data.append(general_purpose)
         
