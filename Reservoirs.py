@@ -35,7 +35,7 @@ path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_poin
 path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
 # path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
 # Do we need Flow accumulation (DEM part) part? If yes --> needDEM = True, if No --> needDEM = False
-needDEM = True
+needDEM = False
 # creating directories
 path_dict = outputDir(path_dict)
 
@@ -124,25 +124,25 @@ def reservoirs(wtshd):
         data.append(np.nanmin(distance_outlet_dams))  # distance of nearest dam from the outlet
         data.append(np.nanmean(distance_outlet_dams))  # average distance of dams from outlet
 
-        # To calculate General Purpose of each watershed based on the dams inside it
+        # To calculate General Purpose of each watershed based on the major dams inside it
         dam = dams_info_gdf.loc[dams_info_gdf["NIDID"].isin(dam_ID)]
-        if len(dam) > 0:  # sometimes some dams in shape file are not in the excel file
+        if len(dam) > 0:  # sometimes some major dams in shape file are not in the excel file
             general_purpose, max_norm_stor, std_norm_stor = general_purpose_watershed(dam, dams_shp_prj)
         else:   # sometimes the dataset has some problem
-            general_purpose = 0
+            general_purpose = -1
             max_norm_stor = 0
             std_norm_stor = 0
 
     else:  # No dam in watershed
         data.extend([-999, -999])  # this is for dams distance and watershed outlet (means no dam in watershed)
-        general_purpose = 0
+        general_purpose = -1
         max_norm_stor = 0
         std_norm_stor = 0
 
     data.append(general_purpose)
     data.append(max_norm_stor)
     data.append(std_norm_stor)
-    ### finding NDAMS_2009:
+    ### finding NDAMS_2009 and normal storage for all dams:
     NDAMS, STOR_NOR_2009 = finding_NDAMS(watershed_prj_noBuffer, dams_info_gdf, path_dict)
 
     data.append(NDAMS)
@@ -170,14 +170,19 @@ for wtshd in shp_lst:   # [1878:]
 #### multiprocessing part is not working yet ##############
 
 # num_cores = multiprocessing.cpu_count()
-# # num_cores = 1
-# print('Number cores:', num_cores, '\n')
+# num_cores = 6
+# print('Number of cores:', num_cores, '\n')
 # p = multiprocessing.Pool(num_cores)
 # start = timeit.default_timer()
 # result = p.map(reservoirs, shp_lst)
 # p.close()
 # p.join()
-
+# columns = [
+#         'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
+#         'general_purpose', "max-normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
+#     ]
+# Reservoirs = pd.DataFrame(result, columns=columns)
+# Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
 
 # appending data that is collected for this watershed to Reservoirs dataframe
 ###### difining a pandas file to store averything inside it.
