@@ -7,6 +7,7 @@ import glob
 import rasterio
 import rasterio.mask
 import rasterio.shutil
+from rasterio.plot import show
 from rasterio.merge import merge
 import fiona
 import haversine as hs # this is for distance calculation between two points
@@ -16,6 +17,8 @@ import shutil
 from matplotlib import pyplot
 import matplotlib.pyplot as plt
 import ogr
+from shapely.geometry import box
+import pycrs
 
 
 def outputDir(path_dict):
@@ -147,6 +150,11 @@ def find_watershed_outlet(watershed_prj, flowAccu_prj_path, gages_prj):
         return ["_", "_", "_", "_"]
 
 
+def getFeatures(gdf):
+    """Function to parse features from GeoDataFrame in such a manner that rasterio wants them"""
+    import json
+    return [json.loads(gdf.to_json())['features'][0]['geometry']]
+
 def create_FlowAccu_tif_file(shapefile, path_dict):
     topo_tif_lst = glob.glob(path_dict['topography_path'] + '*.tif')
     # shpdir_lst = glob.glob(path_dict['path_shp'] + '*')
@@ -173,12 +181,77 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
     ### to  release the memory
     tile = None
     if len(rs_lst) > 1:   # need to mosaic
+        ### firstly, doing clip, and then mosaic the clipped files
+        #read shapefile
+        with fiona.open(shape_path_temp, "r") as shpfile:
+            shapes = [feature["geometry"] for feature in shpfile]
+
+            # read raster files one by one
+            temp_path = []
+            for i, rs in enumerate(rs_lst):
+                with rasterio.open(rs) as src:
+                    bbox = box(np.maximum(src.bounds[0], shpfile.bounds[0]),  # left
+                               np.maximum(src.bounds[1], shpfile.bounds[1]),  # bottom
+                               np.minimum(src.bounds[2], shpfile.bounds[2]),  # right
+                               np.minimum(src.bounds[3], shpfile.bounds[3])    # top
+                               )
+                    geo = gpd.GeoDataFrame({'geometry': bbox}, index=[0], crs="EPSG:4269")
+                    geo = geo.to_crs(crs=src.crs.data['init'])
+                    coords = getFeatures(geo)
+                    out_img, out_transform = rasterio.mask.mask(dataset=src, shapes=coords, crop=True)
+                    out_meta = src.meta.copy()
+                    # we need to parse the epsg value from the CRS so that we can create a proj4 -string using pyCRS
+                    # library (to ensure that the projection information is saved correctly)
+                    epsg_code = int(src.crs.data['init'][5:])
+                    # print(epsg_code)
+                    out_meta.update({"driver": "GTiff",
+                                     "height": out_img.shape[1],
+                                     "width": out_img.shape[2],
+                                     "transform": out_transform,
+                                     "crs": pycrs.parse.from_epsg_code(epsg_code).to_proj4()}
+                                    )
+                    out_tif = os.path.join(path_dict['tempFolder_path'], 'topo_temp_clip_' + str(i) + '.tif')
+                    temp_path.append(out_tif)
+                    with rasterio.open(out_tif, "w", **out_meta) as dest:
+                        dest.write(out_img)
+                    # clipped = rasterio.open(out_tif)
+                    # show(clipped, cmap='terrain')
+                    dest.close()
+                    ### to release the memory
+                    dest = None
+                    out_img = None
+
+
+
+
+
+
+
+                    # out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True)
+                    # out_meta = src.meta
+                    # # make a new file
+                    # out_meta.update({"driver": "GTiff",
+                    #                  "height": out_image.shape[1],
+                    #                  "width": out_image.shape[2],
+                    #                  "transform": out_transform,
+                    #                  "crs": "epsg:4269"})
+                    # path = os.path.join(path_dict['tempFolder_path'], 'topo_temp_clip_' + str(i) + '.tif')
+                    # temp_path.append(path)
+                    # with rasterio.open(path, "w", **out_meta) as dest:
+                    #     dest.write(out_image)
+                    # dest.close()
+                    # ### to release the memory
+                    # dest = None
+                    # out_image = None
+
+            #### now we do mosaic:
+
         src_files_to_mosaic = []
-        for fp in rs_lst:
+        for fp in temp_path:
             src = rasterio.open(fp)
             src_files_to_mosaic.append(src)
         out_image_mos, out_trans = rasterio.merge.merge(src_files_to_mosaic)
-       # make a new file
+        # make a new file
         out_meta = src.meta.copy()
         out_meta.update(
             {
@@ -196,6 +269,34 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         dest = None
         out_image_mos = None
         AccuProcess = True
+        ###########################################
+
+
+
+       #  src_files_to_mosaic = []
+       #  for fp in rs_lst:
+       #      src = rasterio.open(fp)
+       #      src_files_to_mosaic.append(src)
+       #  out_image_mos, out_trans = rasterio.merge.merge(src_files_to_mosaic)
+       # # make a new file
+       #  out_meta = src.meta.copy()
+       #  out_meta.update(
+       #      {
+       #          "driver": "GTiff",
+       #          "height": out_image_mos.shape[1],
+       #          "width": out_image_mos.shape[2],
+       #          "transform": out_trans,
+       #          "crs": "epsg:4269"
+       #      }
+       #  )
+       #  with rasterio.open(temp_mosaic_path, "w", **out_meta) as dest:
+       #      dest.write(out_image_mos)
+       #  dest.close()
+       #  ### to release memory
+       #  dest = None
+       #  out_image_mos = None
+       #  AccuProcess = True
+
     elif len(rs_lst) == 1:
         # copy the tif file to tempfolder to work on
         # shutil.copyfile(rs_lst[0], temp_mosaic_path)
@@ -208,24 +309,28 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         return temp_mosaic_path, AccuProcess   ##  it means the code stops here. because there is not any .tif file
 
     ## clip shapefile and mosaic
-    with fiona.open(shape_path_temp, "r") as shpfile:
-        shapes = [feature["geometry"] for feature in shpfile]
-    with rasterio.open(temp_mosaic_path) as src:
-        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True)
-        out_meta = src.meta
-        # make a new file
-        out_meta.update({"driver": "GTiff",
-                         "height": out_image.shape[1],
-                         "width": out_image.shape[2],
-                         "transform": out_transform,
-                         "crs": "epsg:4269"})
-        topo_clip_temp_path = os.path.join(path_dict['tempFolder_path'], 'topo_temp_clip.tif')
-        with rasterio.open(topo_clip_temp_path, "w", **out_meta) as dest:
-            dest.write(out_image)
-        dest.close()
-        ### to release the memory
-        dest = None
-        out_image = None
+    try:
+        with fiona.open(shape_path_temp, "r") as shpfile:
+            shapes = [feature["geometry"] for feature in shpfile]
+            with rasterio.open(temp_mosaic_path) as src:
+                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True)
+                out_meta = src.meta
+                # make a new file
+                out_meta.update({"driver": "GTiff",
+                                 "height": out_image.shape[1],
+                                 "width": out_image.shape[2],
+                                 "transform": out_transform,
+                                 "crs": "epsg:4269"})
+                topo_clip_temp_path = os.path.join(path_dict['tempFolder_path'], 'topo_temp_clip.tif')
+                with rasterio.open(topo_clip_temp_path, "w", **out_meta) as dest:
+                    dest.write(out_image)
+                dest.close()
+                ### to release the memory
+                dest = None
+                out_image = None
+    except:
+        AccuProcess = False
+        return temp_mosaic_path, AccuProcess
     #  calculating flow direction and flow accumulation (using pysheds package)
     try:
         grid = Grid.from_raster(topo_clip_temp_path, data_name='dem')
@@ -249,10 +354,12 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         return flowAccu_temp_path, AccuProcess
 
 
-def finding_NDAMS(watershed_prj, dams_info_gdf_prj, path_dict):
+def finding_NDAMS(watershed_prj, dams_info_gdf_prj, path_dict,  data):
     dams_clip = gpd.clip(dams_info_gdf_prj, watershed_prj)
     NDAMS = len(dams_clip)
-    STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist()))/(watershed_prj['AREA'][0] * 1e-6) # 1.233 Acre-feet to Megaliter
+    # STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist()))/(watershed_prj['AREA'][0] * 1e-6) # 1.233 Acre-feet to Megaliter
+    STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist())) / (
+                data[1] * 1e-6)  # 1.233 Acre-feet to Megaliter
     return NDAMS, STOR_NOR_2009
 
 

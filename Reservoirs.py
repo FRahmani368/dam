@@ -27,15 +27,17 @@ from src.createOutput import (
 ## shapefiles are in different folders (different categories)
 
 path_dict = {}
-path_dict['output_dir'] = r"/data/fzr5082/"
+# path_dict['output_dir'] = r"/data/fzr5082/"
+path_dict['output_dir'] = r"/scratch/fzr5082"   # r"/data/fzr5082/"
 path_dict['path_shp'] = r"/data/wxt42/hydroDL_reservoir_data/total_shp/CONUS_basin_shp/"  # shapefiles directory
+# path_dict['path_shp'] = r"/data/wxt42/raw_data/shape_file/SRB_HUC10_all/"  # shapefiles directory
 path_dict['path_dams_shp'] = r"/data/fzr5082/NID/maj_dams_shp/us-dams.shp"  # dams point shapefile
 path_dict['path_dams_info'] = r"/data/fzr5082/NID/NID2019_U.feather"  # dams excel file information
 path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_point_shapefile/gagesII_9322_sept30_2011.shp"  # streamflow gauges point shapefile
 path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
 # path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
 # Do we need Flow accumulation (DEM part) part? If yes --> needDEM = True, if No --> needDEM = False
-needDEM = False
+needDEM = True
 # creating directories
 path_dict = outputDir(path_dict)
 
@@ -71,16 +73,30 @@ gages_prj = gages.to_crs('epsg:4269')  # Do projection for the shapefile
 def reservoirs(wtshd):
     data = []  # to store all variables we need and append it to pandas dataframe file at the end
     watershed = gpd.read_file(wtshd)
-    geom_buffer = watershed.buffer(400)    # it was 400 before, Farshid changed it to 0
+    geom_buffer = watershed.buffer(0)    # it was 400 before, Farshid changed it to 0
     watershed1 = gpd.read_file(wtshd)
     watershed1['geometry'] = geom_buffer
     watershed_prj = watershed1.to_crs('epsg:4269')
     watershed_prj_path = os.path.join(path_dict['tempFolder_path'], 'watershed_prj.shp')
     watershed_prj.to_file(watershed_prj_path)
     watershed_prj_noBuffer = watershed.to_crs('epsg:4269')
-    data.append(watershed_prj_noBuffer['GAGE_ID'][0])
-    data.append(watershed_prj_noBuffer['AREA'][0])
-    if needDEM:
+
+    # to get basin's ID:
+    # the column_name is different in shapefile directories:
+    if "GAGE_ID" in watershed.columns:    # this is for Conus shapefiles,
+        data.append(watershed_prj_noBuffer['GAGE_ID'][0])
+    elif "HUC10" in watershed.columns:   # this is for running SRB-HUC10 shapefiles
+        data.append(watershed_prj_noBuffer['HUC10'][0])
+
+    # to get basin's area:
+    # The column_name is different in different shapefiles
+    if "AREA" in watershed.columns:
+       data.append(watershed_prj_noBuffer['AREA'][0])
+    elif "AreaSqKm" in watershed.columns:
+        data.append(watershed_prj_noBuffer['AreaSqKm'][0] * 1e6)    # converting sqkm to sqm
+
+    if (needDEM == True) & (data[1] < 24e9):  # 25e9 is the maximum area that we can musaic,
+        # larger than this, we get memory issue. needs to get fixed in the future
         flowAccu_temp_path, AccuProcess = create_FlowAccu_tif_file(watershed_prj_path, path_dict)
         ### if AccuProcess = True --> it means there is at least a tif file that has overlap with the watershed
         ### if AccuProcess = False --> it means there is not any tif file that has overlap with the watershed
@@ -143,7 +159,7 @@ def reservoirs(wtshd):
     data.append(max_norm_stor)
     data.append(std_norm_stor)
     ### finding NDAMS_2009 and normal storage for all dams:
-    NDAMS, STOR_NOR_2009 = finding_NDAMS(watershed_prj_noBuffer, dams_info_gdf, path_dict)
+    NDAMS, STOR_NOR_2009 = finding_NDAMS(watershed_prj_noBuffer, dams_info_gdf, path_dict, data)
 
     data.append(NDAMS)
     data.append(STOR_NOR_2009)
@@ -155,7 +171,7 @@ def reservoirs(wtshd):
 result = []
 count = 1
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
-for wtshd in shp_lst:   # [1878:]
+for wtshd in shp_lst[2677:]:   # [1878:]
     data = reservoirs(wtshd)
     result.append(data)
     print(count)
