@@ -171,7 +171,7 @@ def reservoirs(wtshd):
 result = []
 count = 1
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
-for wtshd in shp_lst[2677:]:   # [1878:]
+for wtshd in shp_lst:   # [1878:]
     data = reservoirs(wtshd)
     result.append(data)
     print(count)
