@@ -1,20 +1,20 @@
 import os
 import pandas as pd
 import numpy as np
-import pyarrow
+# import pyarrow
 import glob
 import geopandas as gpd
-import multiprocessing
-import timeit
-import ogr
-import gdal
-import shutil
-from matplotlib import pyplot
-import matplotlib.pyplot as plt
+# import multiprocessing
+# import timeit
+# import ogr
+# import gdal
+# import shutil
+# from matplotlib import pyplot
+# import matplotlib.pyplot as plt
 import haversine as hs  # this is for distance calculation between two points (pip install haversine)
-import pysheds
-# import xarray as xr
-from pysheds.grid import Grid  # use conda install -c conda-forge pysheds
+# import pysheds
+# # import xarray as xr
+# from pysheds.grid import Grid  # use conda install -c conda-forge pysheds
 from src.createOutput import (
     outputDir,
     find_watershed_outlet,
@@ -28,7 +28,14 @@ from src.createOutput import (
 
 path_dict = {}
 # path_dict['output_dir'] = r"/data/fzr5082/"
-path_dict['output_dir'] = r"/scratch/fzr5082"   # r"/data/fzr5082/"
+# path_dict['output_dir'] = r"/scratch/fzr5082"   # r"/data/fzr5082/"
+# path_dict['path_shp'] = r"/data/wxt42/hydroDL_reservoir_data/total_shp/CONUS_basin_shp/"  # shapefiles directory
+# # path_dict['path_shp'] = r"/data/wxt42/raw_data/shape_file/SRB_HUC10_all/"  # shapefiles directory
+# path_dict['path_dams_shp'] = r"/data/fzr5082/NID/maj_dams_shp/us-dams.shp"  # dams point shapefile
+# path_dict['path_dams_info'] = r"/data/fzr5082/NID/NID2019_U.feather"  # dams excel file information
+# path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_point_shapefile/gagesII_9322_sept30_2011.shp"  # streamflow gauges point shapefile
+# path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
+path_dict['output_dir'] = r"/data/fzr5082/"
 path_dict['path_shp'] = r"/data/wxt42/hydroDL_reservoir_data/total_shp/CONUS_basin_shp/"  # shapefiles directory
 # path_dict['path_shp'] = r"/data/wxt42/raw_data/shape_file/SRB_HUC10_all/"  # shapefiles directory
 path_dict['path_dams_shp'] = r"/data/fzr5082/NID/maj_dams_shp/us-dams.shp"  # dams point shapefile

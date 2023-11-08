@@ -7,16 +7,16 @@ import glob
 import rasterio
 import rasterio.mask
 import rasterio.shutil
-from rasterio.plot import show
+# from rasterio.plot import show
 from rasterio.merge import merge
 import fiona
 import haversine as hs # this is for distance calculation between two points
-import pysheds
+# import pysheds
 from pysheds.grid import Grid   # use conda install -c conda-forge pysheds
-import shutil
-from matplotlib import pyplot
-import matplotlib.pyplot as plt
-import ogr
+# import shutil
+# from matplotlib import pyplot
+# import matplotlib.pyplot as plt
+# import ogr
 from shapely.geometry import box
 import pycrs
 
@@ -351,6 +351,7 @@ def create_FlowAccu_tif_file(shapefile, path_dict):
         return flowAccu_temp_path, AccuProcess
     except:
         AccuProcess = False
+        flowAccu_temp_path = False
         return flowAccu_temp_path, AccuProcess
 
 
