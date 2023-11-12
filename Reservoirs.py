@@ -44,7 +44,7 @@ path_dict['gages_path'] = r"/data/wxt42/hydroDL_reservoir_data/gagesII_9322_poin
 path_dict['topography_path'] = r"/data/shared_data/NED_10m/"
 # path_dict['topography_path'] = r"/data/shared_data/DEM/SRTMGL1v003_30m/"
 # Do we need Flow accumulation (DEM part) part? If yes --> needDEM = True, if No --> needDEM = False
-needDEM = True
+needDEM = False
 # creating directories
 path_dict = outputDir(path_dict)
 
@@ -176,8 +176,10 @@ def reservoirs(wtshd):
 
 
 result = []
-count = 1
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
+#########################################################
+## single cpu processing
+count = 1
 for wtshd in shp_lst:   # [1878:]
     data = reservoirs(wtshd)
     result.append(data)
@@ -185,30 +187,36 @@ for wtshd in shp_lst:   # [1878:]
     count = count + 1
     columns = [
         'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
-        'general_purpose', "max-normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
+        'general_purpose', "max_normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
     ]
     Reservoirs = pd.DataFrame(result, columns=columns)
     Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
-###########################################################
-#### multiprocessing part is not working yet ##############
 
-# num_cores = multiprocessing.cpu_count()
-# num_cores = 6
-# print('Number of cores:', num_cores, '\n')
-# p = multiprocessing.Pool(num_cores)
-# start = timeit.default_timer()
-# result = p.map(reservoirs, shp_lst)
-# p.close()
-# p.join()
-# columns = [
+###########################################################
+#### multiprocessing part  ##############
+# comment single cpu processing part above
+# def parallel_extraction(item):
+#     wtshd = shp_lst[item]
+#     data = reservoirs(wtshd)
+#     #result.append(data)
+#     result = np.expand_dims(np.array(data),axis = 0)
+#     # print(count)
+#     # count = count + 1
+#     columns = [
 #         'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
 #         'general_purpose', "max-normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
 #     ]
-# Reservoirs = pd.DataFrame(result, columns=columns)
-# Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
-
-# appending data that is collected for this watershed to Reservoirs dataframe
-###### difining a pandas file to store averything inside it.
-###### This is my results
+#
+#     Reservoirs = pd.DataFrame(np.array(result), columns=columns)
+#     Reservoirs.to_csv(os.path.join(path_dict['output_dir'], os.path.split(wtshd)[1].split(".shp")[0]+'.csv'))
+#     shutil.rmtree(path_dict['tempFolder_ID_path'], ignore_errors=False, onerror=None)
+#
+# items = [x for x in np.arange(len(shp_lst))]
+# p = multiprocessing.Pool(5)
+#
+# # b = p.map(rs.getNLDAS2, items)
+# b = p.map(parallel_extraction, items)
+# p.close()
+# p.join()
 
 print('END')
