@@ -62,6 +62,9 @@ def general_purpose_watershed(dam, dams_shp_prj):
                                  np.zeros(13), np.zeros(13)]).transpose()
     purpose_list.columns = ['purpose_code', 'purpose', 'priority', 'normal_stor']
 
+    norm_stor = dam['NORMAL_STORAGE'].tolist()
+    max_stor = dam['MAX_STORAGE'].tolist()
+    NID_stor = dam['NID_STORAGE'].tolist()
     if len(dam) == 1:
         if dam['PURPOSES'].values[0] is None:
             pur = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Purposes'].values[0])
@@ -74,14 +77,18 @@ def general_purpose_watershed(dam, dams_shp_prj):
         else:
             general_purpose = purpose_list.loc[purpose_list['purpose']==dam['PURPOSES'].values[0][0], 'purpose_code'].values[0]
 
-        ## finding the max(normal_storage)
-        max_norm_stor = dam['NORMAL_STORAGE'].values[0]
-        if max_norm_stor is None:
-            max_norm_stor = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Normal_Sto'].values[0])
-            if max_norm_stor is None:
-                max_norm_stor = 0
-        # finding the standard deviation of normal storage of dams. here, as there is one dam --> std = 0
-        std_norm_stor = 0
+
+        if None in norm_stor:
+            norm_stor = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Normal_Sto'].tolist())
+            if None in norm_stor:
+                norm_stor = [0]
+        if None in max_stor:
+            max_stor = (dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].values[0], 'Maximum_St'].tolist())
+            if None in max_stor:
+                max_stor = [0]
+        if None in NID_stor:     # no NID_storage in dams_shp_prj
+            NID_stor = [0]
+
     else:
         pur = dam['PURPOSES'].tolist()
         for ii, i in enumerate(pur):
@@ -91,14 +98,20 @@ def general_purpose_watershed(dam, dams_shp_prj):
                   continue
                 elif len(pur[ii]) > 1:
                     pur[ii] = pur[ii][0]
-        norm_stor = dam['NORMAL_STORAGE'].tolist()
-
+        ### now removing None in pur and norm_stor adn max storage
+        # normal storage
         for ii, i in enumerate(norm_stor):
             if i is None:
                 norm_stor[ii] = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].tolist()[ii], 'Normal_Sto'].values[0]
                 if len(norm_stor[ii]) > 1:
                     norm_stor[ii] = norm_stor[ii][0]
-        ### now removing None in pur and norm_stor
+        # max_storage
+        for ii, i in enumerate(max_stor):
+            if i is None:
+                max_stor[ii] = dams_shp_prj.loc[dams_shp_prj['NID_ID_Cod'] == dam['NIDID'].tolist()[ii], 'Maximum_St'].values[0]
+                if len(max_stor[ii]) > 1:
+                    max_stor[ii] = max_stor[ii][0]
+
         for ii, i in enumerate(pur):
             if i is None:
                 del pur[ii]
@@ -115,12 +128,12 @@ def general_purpose_watershed(dam, dams_shp_prj):
         datatemp = datatemp.sort_values(by='priority').reset_index(drop=True)
         general_purpose = (datatemp.iloc[0]['purpose_code'])
 
-        ## finding the max(normal_storage)
-        max_norm_stor = np.nanmax(norm_stor)
-        # finding the standard deviation of normal storage of dams
-        std_norm_stor = np.nanstd(norm_stor)
+        # ## finding the max(normal_storage)
+        # max_norm_stor = np.nanmax(norm_stor)
+        # # finding the standard deviation of normal storage of dams
+        # std_norm_stor = np.nanstd(norm_stor)
 
-    return general_purpose, max_norm_stor, std_norm_stor
+    return general_purpose, norm_stor, max_stor, NID_stor
 
 def find_watershed_outlet(watershed_prj, flowAccu_prj_path, gages_prj):
     gages_prj_clip = gpd.clip(gages_prj, watershed_prj)
@@ -360,7 +373,7 @@ def finding_NDAMS(watershed_prj, dams_info_gdf_prj, path_dict,  data):
     NDAMS = len(dams_clip)
     # STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist()))/(watershed_prj['AREA'][0] * 1e-6) # 1.233 Acre-feet to Megaliter
     STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist())) / (
-                data[1] * 1e-6)  # 1.233 Acre-feet to Megaliter
+                data["AREA"] * 1e-6)  # 1.233 Acre-feet to Megaliter
     return NDAMS, STOR_NOR_2009
 
 

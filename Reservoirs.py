@@ -78,7 +78,7 @@ gages_prj = gages.to_crs('epsg:4269')  # Do projection for the shapefile
 
 ##################### MAIN PART #########################
 def reservoirs(wtshd):
-    data = []  # to store all variables we need and append it to pandas dataframe file at the end
+    data = dict()  # to store all variables we need and append it to pandas dataframe file at the end
     watershed = gpd.read_file(wtshd)
     geom_buffer = watershed.buffer(0)    # it was 400 before, Farshid changed it to 0
     watershed1 = gpd.read_file(wtshd)
@@ -91,18 +91,18 @@ def reservoirs(wtshd):
     # to get basin's ID:
     # the column_name is different in shapefile directories:
     if "GAGE_ID" in watershed.columns:    # this is for Conus shapefiles,
-        data.append(watershed_prj_noBuffer['GAGE_ID'][0])
+        data['GAGE_ID'] = watershed_prj_noBuffer['GAGE_ID'][0]
     elif "HUC10" in watershed.columns:   # this is for running SRB-HUC10 shapefiles
-        data.append(watershed_prj_noBuffer['HUC10'][0])
+        data['GAGE_ID'] = watershed_prj_noBuffer['HUC10'][0]
 
     # to get basin's area:
     # The column_name is different in different shapefiles
     if "AREA" in watershed.columns:
-       data.append(watershed_prj_noBuffer['AREA'][0])
+       data["AREA"] = watershed_prj_noBuffer['AREA'][0]
     elif "AreaSqKm" in watershed.columns:
-        data.append(watershed_prj_noBuffer['AreaSqKm'][0] * 1e6)    # converting sqkm to sqm
+        data["AREA"] = watershed_prj_noBuffer['AreaSqKm'][0] * 1e6    # converting sqkm to sqm
 
-    if (needDEM == True) & (data[1] < 24e9):  # 25e9 is the maximum area that we can musaic,
+    if (needDEM == True) & (data["AREA"] < 24e9):  # 25e9 is the maximum area that we can musaic,
         # larger than this, we get memory issue. needs to get fixed in the future
         flowAccu_temp_path, AccuProcess = create_FlowAccu_tif_file(watershed_prj_path, path_dict)
         ### if AccuProcess = True --> it means there is at least a tif file that has overlap with the watershed
@@ -114,15 +114,16 @@ def reservoirs(wtshd):
         watershed_outlet = find_watershed_outlet(watershed_prj, flowAccu_temp_path, gages_prj)
     else:
         watershed_outlet = ["_", "_", "_", "_"]
-
-    data.extend(watershed_outlet)
-
+    data["STAID"] = watershed_outlet[0]
+    data["flow_Accu"] = watershed_outlet[1]
+    data["LAT_GAGE"] = watershed_outlet[2]
+    data["LNG_GAGE"] = watershed_outlet[3]
     ## finding all major dams inside a watershed
     selected_maj_dams = gpd.clip(dams_shp_prj, watershed_prj_noBuffer)    # it was dams_shp_prj
     # selected_maj_dams = selected_dams.loc[(selected_dams['DAM_HEIGHT'] >= 50) |
     #                                       (selected_dams['NORMAL_STORAGE'] >= 5000)]
     MAJ_NDAMS = len(selected_maj_dams)  # number of dams inside a watershed
-    data.append(MAJ_NDAMS)
+    data['MAJ_NDAMS'] = MAJ_NDAMS
 
     if (MAJ_NDAMS) > 0:  # at least one dam in the watershed
 
@@ -144,53 +145,61 @@ def reservoirs(wtshd):
             else:
                 distance_outlet_dams.append(-999)   # it was np.nan before
 
-        data.append(np.nanmin(distance_outlet_dams))  # distance of nearest dam from the outlet
-        data.append(np.nanmean(distance_outlet_dams))  # average distance of dams from outlet
+        data["NEAREST_DIS"] = np.nanmin(distance_outlet_dams)   # distance of nearest dam from the outlet
+        data["AVE_DIS"] = np.nanmean(distance_outlet_dams)   # average distance of dams from outlet
+        data["all_distances"] = distance_outlet_dams
 
         # To calculate General Purpose of each watershed based on the major dams inside it
         dam = dams_info_gdf.loc[dams_info_gdf["NIDID"].isin(dam_ID)]
         if len(dam) > 0:  # sometimes some major dams in shape file are not in the excel file
-            general_purpose, max_norm_stor, std_norm_stor = general_purpose_watershed(dam, dams_shp_prj)
+            # general_purpose, max_norm_stor, std_norm_stor = general_purpose_watershed(dam, dams_shp_prj)
+            general_purpose, norm_stor, max_stor, NID_stor = general_purpose_watershed(dam, dams_shp_prj)
         else:   # sometimes the dataset has some problem
             general_purpose = -1
-            max_norm_stor = 0
-            std_norm_stor = 0
+            norm_stor = 0
+            max_stor = 0
+            NID_stor = 0
 
     else:  # No dam in watershed
-        data.extend([-999, -999])  # this is for dams distance and watershed outlet (means no dam in watershed)
+        data["NEAREST_DIS"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
+        data["AVE_DIS"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
         general_purpose = -1
-        max_norm_stor = 0
-        std_norm_stor = 0
+        norm_stor = 0
+        max_stor = 0
+        NID_stor = 0
 
-    data.append(general_purpose)
-    data.append(max_norm_stor)
-    data.append(std_norm_stor)
+    data['general_purpose'] = general_purpose
+    data['max_normal_storage'] = np.nanmax(norm_stor)
+    data['std_normal_storage'] = np.nanstd(norm_stor)
+    data["normal_storage_list"] = norm_stor
+    data["max_storage_list"] = max_stor
+    data["NID_storage_list"] = NID_stor
     ### finding NDAMS_2009 and normal storage for all dams:
     NDAMS, STOR_NOR_2009 = finding_NDAMS(watershed_prj_noBuffer, dams_info_gdf, path_dict, data)
 
-    data.append(NDAMS)
-    data.append(STOR_NOR_2009)
+    data['NDAMS_2009'] = NDAMS
+    data['STOR_NOR_2009'] = STOR_NOR_2009
 
     print("Watershed:       ", os.path.split(wtshd)[-1])
     return data
 
 
-result = []
+Reservoirs = pd.DataFrame()
 shp_lst = glob.glob(os.path.join(path_dict['path_shp'], '*.shp'))
 #########################################################
 ## single cpu processing
 count = 1
 for wtshd in shp_lst:   # [1878:]
     data = reservoirs(wtshd)
-    result.append(data)
+    Reservoirs = pd.concat([Reservoirs, pd.DataFrame([data])], axis=0, ignore_index=True)
     print(count)
     count = count + 1
-    columns = [
-        'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
-        'general_purpose', "max_normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
-    ]
-    Reservoirs = pd.DataFrame(result, columns=columns)
-    Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs.csv'))
+    # columns = [
+    #     'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
+    #     'general_purpose', "max_normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
+    # ]
+    # Reservoirs = pd.DataFrame(result, columns=columns)
+    Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs_new.csv'))
 
 ###########################################################
 #### multiprocessing part  ##############
