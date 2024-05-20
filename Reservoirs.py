@@ -98,11 +98,11 @@ def reservoirs(wtshd):
     # to get basin's area:
     # The column_name is different in different shapefiles
     if "AREA" in watershed.columns:
-       data["AREA"] = watershed_prj_noBuffer['AREA'][0]
+       data["AREA (m2)"] = watershed_prj_noBuffer['AREA'][0]
     elif "AreaSqKm" in watershed.columns:
-        data["AREA"] = watershed_prj_noBuffer['AreaSqKm'][0] * 1e6    # converting sqkm to sqm
+        data["AREA (m2)"] = watershed_prj_noBuffer['AreaSqKm'][0] * 1e6    # converting sqkm to sqm
 
-    if (needDEM == True) & (data["AREA"] < 24e9):  # 25e9 is the maximum area that we can musaic,
+    if (needDEM == True) & (data["AREA (m2)"] < 24e9):  # 25e9 is the maximum area that we can musaic,
         # larger than this, we get memory issue. needs to get fixed in the future
         flowAccu_temp_path, AccuProcess = create_FlowAccu_tif_file(watershed_prj_path, path_dict)
         ### if AccuProcess = True --> it means there is at least a tif file that has overlap with the watershed
@@ -145,9 +145,9 @@ def reservoirs(wtshd):
             else:
                 distance_outlet_dams.append(-999)   # it was np.nan before
 
-        data["NEAREST_DIS"] = np.nanmin(distance_outlet_dams)   # distance of nearest dam from the outlet
-        data["AVE_DIS"] = np.nanmean(distance_outlet_dams)   # average distance of dams from outlet
-        data["all_distances"] = distance_outlet_dams
+        data["NEAREST_DIS (m)"] = np.nanmin(distance_outlet_dams)   # distance of nearest dam from the outlet
+        data["AVE_DIS (m)"] = np.nanmean(distance_outlet_dams)   # average distance of dams from outlet
+        data["all_distances (m)"] = distance_outlet_dams
 
         # To calculate General Purpose of each watershed based on the major dams inside it
         dam = dams_info_gdf.loc[dams_info_gdf["NIDID"].isin(dam_ID)]
@@ -161,24 +161,24 @@ def reservoirs(wtshd):
             NID_stor = 0
 
     else:  # No dam in watershed
-        data["NEAREST_DIS"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
-        data["AVE_DIS"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
+        data["NEAREST_DIS (m)"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
+        data["AVE_DIS (m)"] = -999  # this is for dams distance and watershed outlet (means no dam in watershed)
         general_purpose = -1
         norm_stor = 0
         max_stor = 0
         NID_stor = 0
 
     data['general_purpose'] = general_purpose
-    data['max_normal_storage'] = np.nanmax(norm_stor)
-    data['std_normal_storage'] = np.nanstd(norm_stor)
-    data["normal_storage_list"] = norm_stor
-    data["max_storage_list"] = max_stor
-    data["NID_storage_list"] = NID_stor
+    data['max_normal_storage (acre-feet)'] = np.nanmax(norm_stor)
+    data['std_normal_storage (acre-feet)'] = np.nanstd(norm_stor)
+    data["normal_storage_list (acre-feet)"] = norm_stor
+    data["max_storage_list (acre-feet)"] = max_stor
+    data["NID_storage_list (acre-feet)"] = NID_stor
     ### finding NDAMS_2009 and normal storage for all dams:
     NDAMS, STOR_NOR_2009 = finding_NDAMS(watershed_prj_noBuffer, dams_info_gdf, path_dict, data)
 
     data['NDAMS_2009'] = NDAMS
-    data['STOR_NOR_2009'] = STOR_NOR_2009
+    data['STOR_NOR_2009 (MegaLitre)'] = STOR_NOR_2009
 
     print("Watershed:       ", os.path.split(wtshd)[-1])
     return data
@@ -194,12 +194,7 @@ for wtshd in shp_lst:   # [1878:]
     Reservoirs = pd.concat([Reservoirs, pd.DataFrame([data])], axis=0, ignore_index=True)
     print(count)
     count = count + 1
-    # columns = [
-    #     'GAGE_ID', 'AREA', "STAID", "flow_Accu", "LAT_GAGE", "LNG_GAGE", 'MAJ_NDAMS', "NEAREST_DIS", "AVE_DIS",
-    #     'general_purpose', "max_normal_storage", 'std_norm_stor', 'NDAMS_2009', 'STOR_NOR_2009'
-    # ]
-    # Reservoirs = pd.DataFrame(result, columns=columns)
-    Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs_new.csv'))
+    Reservoirs.to_csv(os.path.join(path_dict['output_dir'], 'Reservoirs_20240519.csv'))
 
 ###########################################################
 #### multiprocessing part  ##############

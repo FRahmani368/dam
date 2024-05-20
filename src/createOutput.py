@@ -373,7 +373,7 @@ def finding_NDAMS(watershed_prj, dams_info_gdf_prj, path_dict,  data):
     NDAMS = len(dams_clip)
     # STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist()))/(watershed_prj['AREA'][0] * 1e-6) # 1.233 Acre-feet to Megaliter
     STOR_NOR_2009 = 1.233 * (np.nansum(dams_clip['NORMAL_STORAGE'].tolist())) / (
-                data["AREA"] * 1e-6)  # 1.233 Acre-feet to Megaliter
+                data["AREA (m2)"] * 1e-6)  # 1.233 Acre-feet to Megaliter
     return NDAMS, STOR_NOR_2009
 
 
